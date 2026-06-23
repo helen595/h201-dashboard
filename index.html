@@ -562,12 +562,12 @@
       <div class="kpi-sub" id="kpi-next-range">—</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">영업이익</div>
+      <div class="kpi-label">영업이익 <span style="color:var(--text3);font-weight:400">(26년 누계)</span></div>
       <div class="kpi-value" id="kpi-op-profit">—</div>
       <div class="kpi-sub"><b id="kpi-op-profit-pct" style="color:var(--text)">—</b> · 매출 − 매출원가 − 판매관리비</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">공헌이익</div>
+      <div class="kpi-label">공헌이익 <span style="color:var(--text3);font-weight:400">(26년 누계)</span></div>
       <div class="kpi-value" id="kpi-cm">—</div>
       <div class="kpi-sub"><b id="kpi-cm-pct" style="color:var(--text)">—</b> · 매출 − 매출원가</div>
     </div>
@@ -3510,30 +3510,21 @@ function renderKPIs() {
   document.getElementById('kpi-total-liquid').textContent = fmt(totalLiquid);
   document.getElementById('kpi-total-liquid-sub').textContent = `현금 ${fmt(k.cash)} + 채권 ${fmt(k.totalAR)}`;
 
-  // 영업이익 / 공헌이익 — 당월(보고기준일 귀속월) 실제 거래 기준
-  //   매출       = 입금 중 대분류 '매출'
-  //   매출원가   = 출금 중 대분류 '매출원가' (변동원가)
-  //   판매관리비 = 출금 중 대분류 '판매관리비' (고정 운영비)
-  //   영업이익 = 매출 − (매출원가+판매관리비) | 공헌이익 = 매출 − 매출원가
+  // 영업이익 / 공헌이익 — 2026년 누계 (2026-01-01 ~ 보고기준일), 실제 입·출금 순액 기준
+  //   월별현금과 동일한 로우 데이터·순액(in−out) 기준 사용 → aggregateActualCashflow
+  //   순매출   = 대분류 '매출'의 net(in−out)
+  //   매출원가/판관비 net(in−out)은 보통 음수(비용). 환급성 입금은 자동으로 비용 차감됨.
+  //   영업이익 = 순매출 + 매출원가net + 판관비net | 공헌이익 = 순매출 + 매출원가net
   (function () {
-    const ym = String(refDate || '').slice(0, 7);
-    const VAR_COST = ['매출원가'];
-    const FIX_COST = ['판매관리비'];
-    let sales = 0, varCost = 0, fixCost = 0;
-    for (const r of cfData) {
-      if (String(r.date || '').slice(0, 7) !== ym) continue; // 당월만
-      if (r.big_cat === '매출') {
-        // 매출: 입금 가산, 출금(환불·외상매출금)은 차감 → 순매출
-        if (r.status === '실제 입금') sales += (r.in || 0);
-        else if (r.status === '실제 지출') sales -= (r.out || 0);
-      } else if (r.status === '실제 지출') {
-        if (VAR_COST.includes(r.big_cat)) varCost += (r.out || 0);
-        else if (FIX_COST.includes(r.big_cat)) fixCost += (r.out || 0);
-      }
-    }
-    const opProfit = sales - varCost - fixCost;
-    const contrib  = sales - varCost;
-    const pct = v => (sales > 0 ? (v / sales * 100).toFixed(1) + '%' : '—');
+    const from = '2026-01-01';
+    const to   = String(refDate || '').slice(0, 10);
+    const byBig = aggregateActualCashflow(cfData, from, to).byBig;
+    const salesNet = byBig['매출']       || 0;
+    const cogsNet  = byBig['매출원가']   || 0; // in − out (보통 음수)
+    const sgaNet   = byBig['판매관리비'] || 0; // in − out (보통 음수)
+    const opProfit = salesNet + cogsNet + sgaNet;
+    const contrib  = salesNet + cogsNet;
+    const pct = v => (salesNet > 0 ? (v / salesNet * 100).toFixed(1) + '%' : '—');
     const setCard = (valId, pctId, val, posCls) => {
       const ve = document.getElementById(valId);
       if (ve) { ve.textContent = fmt(val); ve.className = 'kpi-value ' + (val < 0 ? 'neg' : posCls); }
@@ -3782,13 +3773,13 @@ function renderUpcomingPayments() {
         const diff   = dayDiff(r.date);
         const urg    = urgencyOut(r.date);
         const isPast = diff < 0;
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg3);border-radius:6px;font-size:12px;${isPast?'opacity:0.65':''}">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="color:${urg};font-weight:600;min-width:52px">${dayLabel(r.date)}</span>
-            <span style="color:var(--text2);font-size:11px;min-width:44px">${r.date.slice(5)}</span>
-            <span style="color:var(--text);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</span>
+        return `<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:6px 10px;background:var(--bg3);border-radius:6px;font-size:12px;${isPast?'opacity:0.65':''}">
+          <div style="display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0">
+            <span style="color:${urg};font-weight:600;min-width:52px;flex-shrink:0">${dayLabel(r.date)}</span>
+            <span style="color:var(--text2);font-size:11px;min-width:44px;flex-shrink:0">${r.date.slice(5)}</span>
+            <span style="color:var(--text);flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.4" title="${r.desc}">${r.desc}</span>
           </div>
-          <span style="color:${isPast?'var(--text3)':'var(--red)'};font-weight:500">-${fmt(r.out)}</span>
+          <span style="color:${isPast?'var(--text3)':'var(--red)'};font-weight:500;flex-shrink:0;white-space:nowrap;margin-left:10px">-${fmt(r.out)}</span>
         </div>`;
       }).join('');
     }
@@ -3812,13 +3803,13 @@ function renderUpcomingPayments() {
         const diff   = dayDiff(r.date);
         const urg    = urgencyIn(r.date);
         const isPast = diff < 0;
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg3);border-radius:6px;font-size:12px;${isPast?'opacity:0.65':''}">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="color:${urg};font-weight:600;min-width:52px">${dayLabel(r.date)}</span>
-            <span style="color:var(--text2);font-size:11px;min-width:44px">${r.date.slice(5)}</span>
-            <span style="color:var(--text);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.desc}">${r.desc}</span>
+        return `<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:6px 10px;background:var(--bg3);border-radius:6px;font-size:12px;${isPast?'opacity:0.65':''}">
+          <div style="display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0">
+            <span style="color:${urg};font-weight:600;min-width:52px;flex-shrink:0">${dayLabel(r.date)}</span>
+            <span style="color:var(--text2);font-size:11px;min-width:44px;flex-shrink:0">${r.date.slice(5)}</span>
+            <span style="color:var(--text);flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.4" title="${r.desc}">${r.desc}</span>
           </div>
-          <span style="color:${isPast?'var(--text3)':'var(--green)'};font-weight:500">+${fmt(r.in)}</span>
+          <span style="color:${isPast?'var(--text3)':'var(--green)'};font-weight:500;flex-shrink:0;white-space:nowrap;margin-left:10px">+${fmt(r.in)}</span>
         </div>`;
       }).join('');
     }
@@ -7585,23 +7576,42 @@ function mcfActivityOf(big, mid){
   if (MCF_BIG_TO_ACT[big]) return MCF_BIG_TO_ACT[big];
   return '자금이동/제외';
 }
+/* 실제 입·출금 로우 데이터 공통 집계 — 월별현금·KPI(영업/공헌이익)가 같은 기준 공유
+ *   - 대상: status '실제 입금' | '실제 지출' 만 (예정 제외)
+ *   - 기간: fromDate <= r.date <= toDate (둘 다 '' 이면 미적용, 양 끝 포함)
+ *   - 순액(net) = (Number(in)||0) − (Number(out)||0)  ← 문자열/빈값/null 방어
+ *   - 반환: months(Set), byBig{대분류:net합}, tree{활동:{대분류:{중분류:{월:net}}}}
+ */
+function aggregateActualCashflow(rows, fromDate = '', toDate = ''){
+  const res = { months: new Set(), byBig: {}, tree: {} };
+  for (const r of (rows || [])){
+    if (!(r.status === '실제 입금' || r.status === '실제 지출')) continue;
+    const d = String(r.date || '').slice(0, 10);
+    if (!d) continue;
+    if (fromDate && d < fromDate) continue;
+    if (toDate && d > toDate) continue;
+    const net = (Number(r.in) || 0) - (Number(r.out) || 0);
+    const big = String(r.big_cat || '기타');
+    const mid = String(r.mid_cat || '(미분류)');
+    const m   = d.slice(0, 7);
+    res.months.add(m);
+    res.byBig[big] = (res.byBig[big] || 0) + net;
+    const act = mcfActivityOf(big, mid);
+    res.tree[act] = res.tree[act] || {};
+    res.tree[act][big] = res.tree[act][big] || {};
+    res.tree[act][big][mid] = res.tree[act][big][mid] || {};
+    res.tree[act][big][mid][m] = (res.tree[act][big][mid][m] || 0) + net;
+  }
+  return res;
+}
 function renderMonthlyCashflow(){
   const container = document.getElementById('mcf-table-container');
   if (!container) return;
   const ACTS = ['영업활동','투자활동','재무활동','자금이동/제외'];
-  const monthsSet = new Set();
-  const tree = {}; ACTS.forEach(a => tree[a] = {});
-  for (const r of cfData){
-    if (!(r.status==='실제 입금' || r.status==='실제 지출')) continue;
-    const m = String(r.date||'').slice(0,7); if(!m) continue;
-    monthsSet.add(m);
-    const big = String(r.big_cat||'기타'), mid = String(r.mid_cat||'(미분류)');
-    const act = mcfActivityOf(big, mid);
-    tree[act][big] = tree[act][big] || {};
-    tree[act][big][mid] = tree[act][big][mid] || {};
-    tree[act][big][mid][m] = (tree[act][big][mid][m]||0) + ((Number(r.in)||0) - (Number(r.out)||0));
-  }
-  const months = [...monthsSet].sort();
+  // 공통 집계 헬퍼 사용 (KPI 영업/공헌이익과 동일한 로우 데이터·순액 기준). 월별현금은 전체 기간.
+  const agg = aggregateActualCashflow(cfData);
+  const tree = {}; ACTS.forEach(a => tree[a] = agg.tree[a] || {});
+  const months = [...agg.months].sort();
   const subEl = document.getElementById('mcf-sub');
   if (subEl) subEl.textContent = months.length ? `(${months[0]} ~ ${months[months.length-1]})` : '';
   if (!months.length){ container.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text2)">실제 거래 데이터가 없습니다. 입출금 내역을 업로드하세요.</div>'; return; }

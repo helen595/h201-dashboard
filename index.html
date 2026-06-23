@@ -582,14 +582,14 @@
   <div class="chart-row" style="grid-template-columns:1fr 1fr;margin-bottom:20px">
     <div class="chart-box">
       <div class="chart-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <span>⏰ 다가오는 예정 출금 <small id="upcoming-date-range" style="color:var(--text3);font-weight:400"></small></span>
+        <span>⏰ 다가오는 예정 출금</span>
         <span id="upcoming-out-total" style="font-size:12px;color:var(--red);font-weight:600"></span>
       </div>
       <div id="upcoming-list" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto"></div>
     </div>
     <div class="chart-box">
       <div class="chart-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <span>💰 다가오는 예정 입금 <small id="upcoming-in-date-range" style="color:var(--text3);font-weight:400"></small></span>
+        <span>💰 다가오는 예정 입금</span>
         <span id="upcoming-in-total" style="font-size:12px;color:var(--green);font-weight:600"></span>
       </div>
       <div id="upcoming-in-list" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto"></div>
@@ -3677,12 +3677,7 @@ function updateDashboardDateLabels() {
   const fmtD  = d => d ? d.slice(5).replace('-','/') : '';
   const fmtYM = d => { const [y,m] = d.slice(0,7).split('-'); return `${y}년 ${parseInt(m)}월`; };
 
-  // 다가오는 예정 지출/입금 — 보고기준일 기준 15일
-  const in15dt = new Date(refDate+'T00:00:00'); in15dt.setDate(in15dt.getDate()+15);
-  const limit15 = in15dt.toISOString().slice(0,10);
-  const upRange = `${fmtD(refDate)} ~ ${fmtD(limit15)}`;
-  setText('upcoming-date-range',    upRange);
-  setText('upcoming-in-date-range', upRange);
+  // 다가오는 예정 지출/입금 — 기간 제한 없음(전체 표시), 기간 문구 미사용
 
   // 지출 대분류 비중 월간 — 보고기준일 속한 달
   setText('donut-date-range', fmtYM(refDate));
@@ -3746,8 +3741,6 @@ function renderMonthlyRevenueChart() {
 /* ---- 다가오는 예정 지출 ---- */
 function renderUpcomingPayments() {
   const today = new Date().toISOString().slice(0,10);
-  const in15dt = new Date(refDate+'T00:00:00'); in15dt.setDate(in15dt.getDate()+15);
-  const limit  = in15dt.toISOString().slice(0,10);
 
   const dayDiff  = d => Math.ceil((new Date(d+'T00:00:00') - new Date(refDate+'T00:00:00')) / 86400000);
   const dayLabel = d => {
@@ -3771,20 +3764,19 @@ function renderUpcomingPayments() {
     return 'var(--text2)';
   };
 
-  // 예정 지출 — 미처리 항목 모두 표시 (과거 포함, 기준일+15일까지)
+  // 예정 지출 — 전체 표시 (과거 미처리 포함, 기간/건수 제한 없음)
   const outEl    = document.getElementById('upcoming-list');
   const outTotal = document.getElementById('upcoming-out-total');
   if (outEl) {
     const upcoming = cfData
-      .filter(r => r.status === '지출 예정' && r.date <= limit)
-      .sort((a,b) => a.date.localeCompare(b.date))
-      .slice(0,15);
+      .filter(r => r.status === '지출 예정')
+      .sort((a,b) => a.date.localeCompare(b.date));
 
-    const total = upcoming.reduce((s,r) => s+r.out, 0);
+    const total = upcoming.reduce((s,r) => s + Number(r.out || 0), 0);
     if (outTotal) outTotal.textContent = total > 0 ? `합계 -${fmt(total)}` : '';
 
     if (!upcoming.length) {
-      outEl.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">해당 기간 예정 출금 없음</div>';
+      outEl.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">예정 출금 없음</div>';
     } else {
       outEl.innerHTML = upcoming.map(r => {
         const diff   = dayDiff(r.date);
@@ -3802,20 +3794,19 @@ function renderUpcomingPayments() {
     }
   }
 
-  // 예정 입금 — 미처리 항목 모두 표시 (과거 포함, 기준일+15일까지)
+  // 예정 입금 — 전체 표시 (과거 미처리 포함, 기간/건수 제한 없음)
   const inEl    = document.getElementById('upcoming-in-list');
   const inTotal = document.getElementById('upcoming-in-total');
   if (inEl) {
     const upcomingIn = cfData
-      .filter(r => r.status === '입금 예정' && r.date <= limit)
-      .sort((a,b) => a.date.localeCompare(b.date))
-      .slice(0,15);
+      .filter(r => r.status === '입금 예정')
+      .sort((a,b) => a.date.localeCompare(b.date));
 
-    const totalIn = upcomingIn.reduce((s,r) => s+r.in, 0);
+    const totalIn = upcomingIn.reduce((s,r) => s + Number(r.in || 0), 0);
     if (inTotal) inTotal.textContent = totalIn > 0 ? `합계 +${fmt(totalIn)}` : '';
 
     if (!upcomingIn.length) {
-      inEl.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">해당 기간 예정 입금 없음</div>';
+      inEl.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">예정 입금 없음</div>';
     } else {
       inEl.innerHTML = upcomingIn.map(r => {
         const diff   = dayDiff(r.date);

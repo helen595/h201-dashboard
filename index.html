@@ -2284,6 +2284,24 @@
 <script>
 let INIT_CASH = parseInt(localStorage.getItem('init_cash') || '134838617'); // Supabase 로드 후 덮어씀
 let isInitCashHidden = localStorage.getItem('init_cash_hidden') === 'true'; // 숨김 상태 (localStorage 유지)
+// 현재 잔액 카드 하단 '기준' 일자용 — cf_data.updated_at(입출금내역 마지막 저장 시각, UTC ISO)
+let cfUpdatedAt = null;
+// updated_at(ISO/UTC) → Asia/Seoul 'YYYY-MM-DD'. 실패 시 null (방어적).
+function cfUpdatedDateKST() {
+  try {
+    if (!cfUpdatedAt) return null;
+    const d = new Date(cfUpdatedAt);
+    if (isNaN(d.getTime())) return null;
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  } catch (e) { return null; }
+}
+// 현재 잔액 카드 하단 '기준' 텍스트 갱신 (즉시 반영용)
+function refreshCashSubDate() {
+  const el = document.getElementById('kpi-cash-sub');
+  if (!el) return;
+  const kst = cfUpdatedDateKST();
+  el.textContent = `기준: ${kst || refDate || '정보 없음'}`;
+}
 
 /* ===== 법인카드 탭 — 열/행 설정 ===== */
 const DEFAULT_CORP_CARD_COLUMNS  = ['BX','국내마케팅','서두준','센터(본사)','정치열','최성백','최영식','하경수','하이패스','해외마케팅','해외사업'];
@@ -2707,8 +2725,9 @@ async function loadDataFromSupabase() {
   try {
     setSyncStatus('connecting');
 
-    const cfRes = await _supa.from('cf_data').select('id, data').limit(1).single();
+    const cfRes = await _supa.from('cf_data').select('id, data, updated_at').limit(1).single();
     arData = []; // AR 제거 버전 — 매출채권 없음
+    cfUpdatedAt = cfRes.data?.updated_at || null; // 입출금내역 마지막 저장 시각(현재 잔액 카드 '기준'용)
 
     // 기본 데이터 복원 정책:
     //   row 자체가 없는 경우(첫 설치, _supa row 미생성) → getDefault*() 로 초기값 삽입
@@ -2736,6 +2755,7 @@ async function loadDataFromSupabase() {
     // Supabase 전체 연결 실패 시에만 localStorage fallback 사용
     console.warn('[loadData] cf_data/ar_data 로드 실패 — localStorage 폴백:', e);
     setSyncStatus('offline');
+    cfUpdatedAt = localStorage.getItem('cf_data_safe_count_updated_at') || null; // 오프라인: 마지막 저장 시각 대체
     const savedCF = localStorage.getItem('cf_data');
     // 기본 데이터 복원 정책 (localStorage 폴백 경로):
     //   key가 존재하면(null이 아니면) → JSON.parse 결과 사용 ('[]' 포함 — 빈 배열도 유효한 상태)
@@ -2914,7 +2934,10 @@ async function saveDataToSupabase(opts = {}) {
 
     const cfRow = await _supa.from('cf_data').select('id').limit(1).single();
 
-    await _supa.from('cf_data').update({ data: cfSnap, updated_at: new Date().toISOString() }).eq('id', cfRow.data.id);
+    const _cfNowIso = new Date().toISOString();
+    await _supa.from('cf_data').update({ data: cfSnap, updated_at: _cfNowIso }).eq('id', cfRow.data.id);
+    cfUpdatedAt = _cfNowIso;        // 입출금내역 저장 → 마지막 저장 시각 갱신
+    refreshCashSubDate();          // 현재 잔액 카드 '기준' 일자 즉시 반영(새로고침 불필요)
 
     // Supabase 저장 완료 후 localStorage 재갱신
     // → SELECT 대기 중 Realtime 에코가 localStorage를 덮어쓴 경우를 복원
@@ -2962,6 +2985,7 @@ function subscribeRealtime() {
       try {
         const newData = payload.new.data;
         cfData = Array.isArray(newData) ? newData : JSON.parse(newData);
+        if (payload.new.updated_at) cfUpdatedAt = payload.new.updated_at; // 다른 기기 저장 → 기준 일자도 갱신(renderAll이 반영)
         ensureCFIds();
         // Fix 2: 메모리와 localStorage 동기화 — 미갱신 시 재시작 후 Supabase 데이터가 localStorage를 덮어씀
         localStorage.setItem('cf_data', JSON.stringify(cfData));
@@ -3478,7 +3502,8 @@ function renderKPIs() {
 
   // 현재 현금잔액
   document.getElementById('kpi-cash').textContent = fmt(k.cash);
-  document.getElementById('kpi-cash-sub').textContent = `기준: ${refDate}`;
+  // '기준' 일자: 입출금내역 마지막 저장일(cf_data.updated_at, 한국시간). 없거나 변환 실패 시 refDate→'정보 없음'.
+  document.getElementById('kpi-cash-sub').textContent = `기준: ${cfUpdatedDateKST() || refDate || '정보 없음'}`;
 
   // 총 유동자산
   const totalLiquid = k.cash + k.totalAR;

@@ -562,12 +562,12 @@
       <div class="kpi-sub" id="kpi-next-range">—</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">영업이익 <span style="color:var(--text3);font-weight:400">(26년 누계)</span></div>
+      <div class="kpi-label">영업이익 <span id="kpi-op-profit-period" style="color:var(--text3);font-weight:400">(26년 누계)</span></div>
       <div class="kpi-value" id="kpi-op-profit">—</div>
       <div class="kpi-sub"><b id="kpi-op-profit-pct" style="color:var(--text)">—</b> · 매출 − 매출원가 − 판매관리비</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">공헌이익 <span style="color:var(--text3);font-weight:400">(26년 누계)</span></div>
+      <div class="kpi-label">공헌이익 <span id="kpi-cm-period" style="color:var(--text3);font-weight:400">(26년 누계)</span></div>
       <div class="kpi-value" id="kpi-cm">—</div>
       <div class="kpi-sub"><b id="kpi-cm-pct" style="color:var(--text)">—</b> · 매출 − 매출원가</div>
     </div>
@@ -3516,7 +3516,9 @@ function renderKPIs() {
   //   매출원가/판관비 net(in−out)은 보통 음수(비용). 환급성 입금은 자동으로 비용 차감됨.
   //   영업이익 = 순매출 + 매출원가net + 판관비net | 공헌이익 = 순매출 + 매출원가net
   (function () {
-    const from = '2026-01-01';
+    // 누계 시작일은 refDate의 연도 기준 (연도 롤오버 대응 — 하드코딩 금지)
+    const yr   = String(refDate || '').slice(0, 4) || '2026';
+    const from = `${yr}-01-01`;
     const to   = String(refDate || '').slice(0, 10);
     const byBig = aggregateActualCashflow(cfData, from, to).byBig;
     const salesNet = byBig['매출']       || 0;
@@ -3531,6 +3533,12 @@ function renderKPIs() {
       const pe = document.getElementById(pctId);
       if (pe) pe.textContent = pct(val);
     };
+    // KPI 라벨의 '누계' 연도도 refDate 기준으로 동적 표기 (HTML 하드코딩 '26년' 대체)
+    const periodLabel = `(${yr.slice(2)}년 누계)`;
+    const opPer = document.getElementById('kpi-op-profit-period');
+    if (opPer) opPer.textContent = periodLabel;
+    const cmPer = document.getElementById('kpi-cm-period');
+    if (cmPer) cmPer.textContent = periodLabel;
     setCard('kpi-op-profit', 'kpi-op-profit-pct', opProfit, 'blue');
     setCard('kpi-cm', 'kpi-cm-pct', contrib, 'green');
   })();

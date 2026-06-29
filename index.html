@@ -3245,12 +3245,6 @@ function fmt(n) {
   if (n === null || n === undefined || isNaN(n)) return '—';
   return new Intl.NumberFormat('ko-KR').format(Math.round(n));
 }
-// XSS 방어: innerHTML 템플릿에 사용자/엑셀 유래 문자열을 넣을 때 항상 감싼다.
-// 셀 내용·title 등 속성값 모두 적용 (속성값엔 " ' 이스케이프가 특히 중요).
-function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
 function fmtM(n) {
   // !n 조건은 0도 falsy로 처리해 0원을 '—'로 표시하는 버그가 있었음
   // null / undefined / NaN 만 '—' 처리하고, 0은 숫자로 표시
